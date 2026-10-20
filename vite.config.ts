@@ -1,43 +1,20 @@
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import youtubeHandler from './api/youtube.ts'
 
-function jamendoProxy(): Plugin {
+// Dev: serve the Vercel function at the same path.
+function youtubeApi(): Plugin {
   return {
-    name: 'jamendo-proxy',
+    name: 'youtube-api',
     configureServer(server) {
-      server.middlewares.use(
-        '/api/tracks',
-        async (req: IncomingMessage, res: ServerResponse) => {
-          const env = loadEnv(server.config.mode, server.config.root, '')
-          const clientId = env.JAMENDO_CLIENT_ID
-          if (!clientId) {
-            res.statusCode = 500
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ error: 'Missing JAMENDO_CLIENT_ID in .env' }))
-            return
-          }
-          const url = new URL(req.url ?? '/', 'http://localhost')
-          const params = new URLSearchParams(url.search)
-          params.set('client_id', clientId)
-          params.set('format', 'json')
-          try {
-            const r = await fetch(
-              `https://api.jamendo.com/v3.0/tracks?${params}`,
-            )
-            const body = await r.text()
-            res.statusCode = r.status
-            res.setHeader('Content-Type', 'application/json')
-            res.end(body)
-          } catch {
-            res.statusCode = 502
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ error: 'Jamendo request failed' }))
-          }
-        },
-      )
+      server.middlewares.use('/api/youtube', (req, res) => {
+        // Re-read .env per request so adding the key needs no restart.
+        const env = loadEnv(server.config.mode, server.config.root, '')
+        if (env.YOUTUBE_API_KEY) process.env.YOUTUBE_API_KEY = env.YOUTUBE_API_KEY
+        void youtubeHandler(req, res)
+      })
     },
   }
 }
@@ -46,7 +23,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    jamendoProxy(),
+    youtubeApi(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.svg'],

@@ -37,7 +37,7 @@ export function TrackRow({
         </div>
         {showDuration && (
           <span className="tabular-nums shrink-0 text-xs text-text-muted pr-1">
-            {formatTime(track.duration)}
+            {track.duration > 0 && formatTime(track.duration)}
           </span>
         )}
       </button>

@@ -115,7 +115,7 @@ export function QueueSheet() {
                       </p>
                     </div>
                     <span className="tabular-nums text-xs text-text-muted">
-                      {formatTime(track.duration)}
+                      {track.duration > 0 && formatTime(track.duration)}
                     </span>
                   </button>
                   <button

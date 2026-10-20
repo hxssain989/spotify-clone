@@ -5,7 +5,6 @@ export type Track = {
   artistName: string
   albumName: string
   image: string
-  audio: string
   duration: number
 }
 

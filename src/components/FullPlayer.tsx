@@ -36,11 +36,12 @@ export function FullPlayer() {
   )
   const toggleLike = useLibraryStore((s) => s.toggleLike)
 
-  if (!open || !track) return null
-
+  // Always mounted: #yt-host holds the YouTube player and must not unmount.
   return (
     <div
-      className="fixed inset-0 z-[60] flex flex-col bg-gradient-to-b from-neutral-800 to-surface"
+      className={`fixed inset-0 z-[60] flex flex-col bg-gradient-to-b from-neutral-800 to-surface ${
+        open && track ? '' : 'hidden'
+      }`}
       role="dialog"
       aria-modal="true"
       aria-label="Now playing"
@@ -55,15 +56,19 @@ export function FullPlayer() {
           <ChevronDown className="h-8 w-8" />
         </button>
 
-        <div className="mx-auto mt-4 aspect-square w-full max-w-sm overflow-hidden rounded-lg bg-surface-highlight shadow-2xl">
-          {track.image ? (
+        <div className="relative mx-auto mt-4 aspect-square w-full max-w-sm overflow-hidden rounded-lg bg-surface-highlight shadow-2xl">
+          {track?.image ? (
             <img
               src={track.image}
               alt=""
               className="h-full w-full object-cover"
             />
           ) : null}
+          <div id="yt-host" className="absolute inset-0 empty:hidden" />
         </div>
+
+        {track && (
+        <>
 
         <div className="mt-8 min-w-0">
           <h1 className="truncate text-2xl font-bold">{track.name}</h1>
@@ -150,6 +155,8 @@ export function FullPlayer() {
             <ListMusic className="h-7 w-7" />
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   )

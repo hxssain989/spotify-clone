@@ -1,18 +1,15 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import {
-  initMediaSession,
-  updateMediaSession,
-  updatePositionState,
-} from '../audio/mediaSession'
-import {
-  audio,
+  currentTime,
+  hasLoadedVideo,
   loadAndPlay,
   pauseAudio,
   resumeAudio,
   seekAudio,
   setAudioVolume,
 } from '../audio/audioEngine'
+import { toast } from '../components/Toast'
 import type { RepeatMode, Track } from '../types'
 import { useLibraryStore } from './libraryStore'
 
@@ -88,21 +85,32 @@ function stopPersistTimer() {
   }
 }
 
-async function playIndex(index: number) {
-  const state = usePlayerStore.getState()
-  const track = state.queue[index]
+async function playIndex(index: number, startSeconds = 0) {
+  const track = usePlayerStore.getState().queue[index]
   if (!track) return
 
   useLibraryStore.getState().cacheTrack(track)
-  usePlayerStore.setState({ index, position: 0 })
+  // YouTube's player has to be on screen while it plays.
+  usePlayerStore.setState({
+    index,
+    position: startSeconds,
+    duration: track.duration,
+    fullPlayerOpen: true,
+  })
 
   try {
-    await loadAndPlay(track.audio)
-    usePlayerStore.setState({ isPlaying: true })
-    updateMediaSession(track, true)
+    await loadAndPlay(track, startSeconds)
     startPersistTimer()
-  } catch {
-    usePlayerStore.getState().next(true)
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Playback failed'
+    if (message === 'No video found') {
+      toast('Song not found on YouTube — skipping')
+      usePlayerStore.getState().next(true)
+    } else {
+      // Quota, missing key or network: skipping would just fail again.
+      toast(message)
+      usePlayerStore.setState({ isPlaying: false })
+    }
   }
 }
 
@@ -137,19 +145,20 @@ export const usePlayerStore = create<PlayerState>()(
       },
 
       play: () => {
-        const track = currentTrack(get())
-        if (!track) return
-        void resumeAudio().then(() => {
-          set({ isPlaying: true })
-          updateMediaSession(track, true)
-          startPersistTimer()
-        })
+        const { index, position } = get()
+        if (!currentTrack(get())) return
+        if (!hasLoadedVideo()) {
+          void playIndex(index, position) // restored track, not loaded yet
+          return
+        }
+        set({ fullPlayerOpen: true })
+        resumeAudio()
+        startPersistTimer()
       },
 
       pause: () => {
         pauseAudio()
         set({ isPlaying: false })
-        updateMediaSession(currentTrack(get()), false)
         get().persistPlayback()
         stopPersistTimer()
       },
@@ -158,7 +167,7 @@ export const usePlayerStore = create<PlayerState>()(
         const { queue, index, repeat } = get()
         if (repeat === 'one' && !fromError) {
           seekAudio(0)
-          void resumeAudio()
+          resumeAudio()
           return
         }
         if (index < queue.length - 1) {
@@ -171,7 +180,6 @@ export const usePlayerStore = create<PlayerState>()(
         }
         pauseAudio()
         set({ isPlaying: false })
-        updateMediaSession(currentTrack(get()), false)
         stopPersistTimer()
       },
 
@@ -180,7 +188,6 @@ export const usePlayerStore = create<PlayerState>()(
         if (position > 3) {
           seekAudio(0)
           set({ position: 0 })
-          updatePositionState()
           return
         }
         if (index > 0) void playIndex(index - 1)
@@ -192,8 +199,7 @@ export const usePlayerStore = create<PlayerState>()(
 
       seek: (seconds) => {
         seekAudio(seconds)
-        set({ position: audio.currentTime })
-        updatePositionState()
+        set({ position: Math.max(0, seconds) })
       },
 
       addToQueue: (track) => {
@@ -277,7 +283,6 @@ export const usePlayerStore = create<PlayerState>()(
           position: 0,
           duration: 0,
         })
-        updateMediaSession(null, false)
       },
 
       toggleShuffle: () => {
@@ -326,14 +331,17 @@ export const usePlayerStore = create<PlayerState>()(
         void playIndex(index)
       },
 
-      setFullPlayerOpen: (open) => set({ fullPlayerOpen: open }),
+      setFullPlayerOpen: (open) => {
+        set({ fullPlayerOpen: open })
+        if (!open) get().pause() // video must stay visible while playing
+      },
       setQueueOpen: (open) => set({ queueOpen: open }),
 
       persistPlayback: () => {
         const track = currentTrack(get())
         set({
           lastTrackId: track?.id ?? null,
-          lastPosition: audio.currentTime || get().position,
+          lastPosition: currentTime() || get().position,
         })
       },
 
@@ -355,10 +363,7 @@ export const usePlayerStore = create<PlayerState>()(
           index: 0,
           isPlaying: false,
         })
-        audio.src = track.audio
-        seekAudio(lastPosition)
-        set({ position: lastPosition })
-        updateMediaSession(track, false)
+        set({ position: lastPosition, duration: track.duration })
       },
     }),
     {
@@ -373,7 +378,6 @@ export const usePlayerStore = create<PlayerState>()(
 )
 
 export function bootstrapPlayer() {
-  initMediaSession()
   const { setVolume, restoreIfNeeded, volume } = usePlayerStore.getState()
   setVolume(volume)
   void restoreIfNeeded()

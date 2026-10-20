@@ -6,13 +6,14 @@ import { IosInstallHint } from '../components/IosInstallHint'
 import { usePlayerStore } from '../store/playerStore'
 import type { Track } from '../types'
 
-const GENRES = ['pop', 'rock', 'electronic', 'hiphop', 'chillout'] as const
+// iTunes genre ids
+const GENRES = ['14', '21', '7', '18', '15'] as const
 const GENRE_LABELS: Record<(typeof GENRES)[number], string> = {
-  pop: 'Pop',
-  rock: 'Rock',
-  electronic: 'Electronic',
-  hiphop: 'Hip-hop',
-  chillout: 'Chill',
+  '14': 'Pop',
+  '21': 'Rock',
+  '7': 'Electronic',
+  '18': 'Hip-hop',
+  '15': 'R&B',
 }
 
 function TrackRowSection({

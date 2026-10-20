@@ -110,17 +110,8 @@ export function LibraryPage() {
       <section className="mt-10 border-t border-neutral-800 pt-6 pb-4">
         <h2 className="mb-2 text-lg font-semibold">About</h2>
         <p className="text-sm text-text-muted leading-relaxed">
-          Independent music via{' '}
-          <a
-            href="https://www.jamendo.com"
-            className="text-accent underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Jamendo
-          </a>
-          . Non-commercial use only. Background playback works best when
-          installed to your home screen.
+          Song info from Apple's iTunes catalog, playback through YouTube.
+          Music plays while the player is open on screen.
         </p>
       </section>
 
