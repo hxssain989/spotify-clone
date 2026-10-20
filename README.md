@@ -28,3 +28,14 @@ Open the dev URL on your phone (same Wi‑Fi) or use `npm run build && npm run p
 - `npm run preview` — serve production build locally
 
 The YouTube key allows about 100 new song lookups a day across all users (each costs 100 of 10,000 daily quota units). Lookups are cached, so replaying a song is free.
+
+## Access codes
+
+Only buyers with a code can use the app. Each code unlocks up to 2 devices. Codes live in Upstash Redis (`KV_REST_API_URL` / `KV_REST_API_TOKEN` in `.env` locally and in Vercel).
+
+```bash
+npm run code -- "Ahmed"            # make a code for a buyer
+npm run codes                      # list codes, buyers and devices used
+npm run reset -- AHMED-7K3Q-9XPA   # clear its devices (buyer got a new phone)
+npm run revoke -- AHMED-7K3Q-9XPA  # turn the code off for good
+```

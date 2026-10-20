@@ -2,19 +2,23 @@ import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
+import accessHandler from './api/access.ts'
 import youtubeHandler from './api/youtube.ts'
 
-// Dev: serve the Vercel function at the same path.
-function youtubeApi(): Plugin {
+// Dev: serve the Vercel functions at the same paths.
+function apiRoutes(): Plugin {
   return {
-    name: 'youtube-api',
+    name: 'api-routes',
     configureServer(server) {
-      server.middlewares.use('/api/youtube', (req, res) => {
-        // Re-read .env per request so adding the key needs no restart.
-        const env = loadEnv(server.config.mode, server.config.root, '')
-        if (env.YOUTUBE_API_KEY) process.env.YOUTUBE_API_KEY = env.YOUTUBE_API_KEY
-        void youtubeHandler(req, res)
-      })
+      const routes = { '/api/youtube': youtubeHandler, '/api/access': accessHandler }
+      for (const [path, handler] of Object.entries(routes)) {
+        server.middlewares.use(path, (req, res) => {
+          // Re-read .env per request so new keys need no restart.
+          const env = loadEnv(server.config.mode, server.config.root, '')
+          for (const [k, v] of Object.entries(env)) if (v) process.env[k] = v
+          void handler(req, res)
+        })
+      }
     },
   }
 }
@@ -23,7 +27,7 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    youtubeApi(),
+    apiRoutes(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/*.svg'],

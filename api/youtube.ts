@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { hasAccess } from './_access.js'
 
 // GET /api/youtube?q=artist+song -> { videoIds } (best first; some refuse embedding)
 // Plain Node req/res so the same handler runs on Vercel and in the Vite dev server.
@@ -12,6 +13,15 @@ export default async function handler(
     // One search costs 100 quota units; let Vercel's CDN answer repeats.
     if (cacheable) res.setHeader('Cache-Control', 'public, s-maxage=2592000')
     res.end(JSON.stringify(body))
+  }
+
+  // Only buyers with an unlocked device may spend the YouTube quota.
+  try {
+    if (!(await hasAccess(req))) {
+      return send(401, { error: 'Enter your access code' })
+    }
+  } catch {
+    return send(500, { error: 'Could not check access' })
   }
 
   const key = process.env.YOUTUBE_API_KEY

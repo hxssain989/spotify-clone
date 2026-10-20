@@ -31,7 +31,7 @@ export function IosInstallHint() {
     <div className="mx-4 mb-2 rounded-lg border border-neutral-700 bg-surface-elevated p-3 text-sm">
       <div className="flex gap-2">
         <p className="flex-1 text-text-muted">
-          For background playback on iPhone, tap Share and{' '}
+          To install on iPhone, tap Share and{' '}
           <span className="text-white">Add to Home Screen</span>.
         </p>
         <button

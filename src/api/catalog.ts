@@ -1,3 +1,4 @@
+import { relock } from '../components/AccessGate'
 import type { Track } from '../types'
 
 // iTunes Search API: free, no key, CORS-enabled, ~20 calls/min per IP.
@@ -95,41 +96,69 @@ const norm = (s: string) =>
 const mainArtist = (t: Track) =>
   norm(t.artistName.split(/,|&| feat| ft\.| x /i)[0])
 
-// iTunes has no popularity score. Proxy: the original artist shows up many
-// times (album, single, deluxe, remixes), a cover artist once. We drop
-// duplicates and loose matches, rank by that count, and push alt versions down.
+const baseTitle = (t: Track) => norm(t.name.replace(/\s*[([].*$/, ''))
+
+// "Him & I (Techno)", karaoke, covers... unless the user typed that word.
+// (Taylor's Version) is a re-recording by the artist, so it stays.
+const isAlt = (t: Track) => {
+  const text = `${t.name} ${t.artistName} ${t.albumName}`.replace(
+    /taylor['’]s version/gi,
+    '',
+  )
+  return (
+    ALT_VERSION.test(text) ||
+    TAGGED.test(t.name.replace(/\(taylor['’]s version\)/gi, ''))
+  )
+}
+
+// Only songs whose title is what was typed survive (or starts with it while
+// typing, or title + artist like "aarzu hasan raheem"). If the query is an
+// artist's name, show that artist's songs instead. iTunes has no popularity
+// score, so we rank by how often each artist appears: originals have many
+// releases (album, single, deluxe), covers one.
 export function rankResults(query: string, tracks: Track[]): Track[] {
+  const q = norm(query)
+  if (!q) return []
   const artistHits = new Map<string, number>()
   for (const t of tracks) {
     artistHits.set(mainArtist(t), (artistHits.get(mainArtist(t)) ?? 0) + 1)
   }
+  const hits = (t: Track) => artistHits.get(mainArtist(t)) ?? 0
+
+  const titleMatch = (t: Track) => {
+    const title = baseTitle(t)
+    if (!title) return false
+    if (title.startsWith(q)) return true
+    const artistWords = norm(t.artistName).split(' ')
+    const inArtist = (rest: string) =>
+      rest.split(' ').every((w) => artistWords.includes(w))
+    if (q.startsWith(`${title} `)) return inArtist(q.slice(title.length + 1))
+    if (q.endsWith(` ${title}`)) return inArtist(q.slice(0, -title.length - 1))
+    return false
+  }
+  const byTitle = tracks.filter(titleMatch)
+  const byArtist = tracks.filter((t) => norm(t.artistName).includes(q))
+  const artistSearch = byArtist.length > byTitle.length
+  let list = artistSearch ? byArtist : byTitle
+
+  if (!ALT_VERSION.test(query)) {
+    const originals = list.filter((t) => !isAlt(t))
+    if (originals.length) list = originals
+  }
+
   const seen = new Set<string>()
-  const unique = tracks.filter((t) => {
-    const key = `${norm(t.name)}|${norm(t.artistName)}`
+  list = list.filter((t) => {
+    const key = `${baseTitle(t)}|${mainArtist(t)}`
     if (seen.has(key)) return false
     seen.add(key)
     return true
   })
-  const words = norm(query).split(' ')
-  const relevant = unique.filter((t) => {
-    const text = ` ${norm(`${t.name} ${t.artistName}`)} `
-    return words.every((w) => text.includes(w))
-  })
-  const q = norm(query)
-  // "Him & I (Remastered)" -> "him and i": exact title matches come first,
-  // unless the query is an artist name ("taylor swift").
-  const artistQuery = (artistHits.get(q) ?? 0) >= 3
-  const exact = (t: Track) =>
-    !artistQuery && norm(t.name.replace(/\s*[([].*$/, '')) === q ? 1 : 0
-  const hits = (t: Track) => artistHits.get(mainArtist(t)) ?? 0
-  const list = (relevant.length ? relevant : unique).sort(
-    (a, b) => exact(b) - exact(a) || hits(b) - hits(a), // stable on ties
-  )
-  if (ALT_VERSION.test(query)) return list.slice(0, 25)
-  const isAlt = (t: Track) =>
-    ALT_VERSION.test(`${t.name} ${t.artistName} ${t.albumName}`) ||
-    TAGGED.test(t.name)
-  return [...list.filter((t) => !isAlt(t)), ...list.filter(isAlt)].slice(0, 25)
+
+  if (!artistSearch) {
+    const exact = (t: Track) => (baseTitle(t) === q ? 1 : 0)
+    list.sort((a, b) => exact(b) - exact(a) || hits(b) - hits(a)) // stable
+  }
+  return list.slice(0, artistSearch ? 20 : 10)
 }
 
 export async function searchTracks(query: string): Promise<Track[]> {
@@ -188,6 +217,7 @@ export async function resolveVideoIds(track: Track): Promise<string[]> {
   if (hit?.length) return typeof hit === 'string' ? [hit] : hit
   const q = `${track.artistName} ${track.name} audio`
   const res = await fetch(`/api/youtube?${new URLSearchParams({ q })}`)
+  if (res.status === 401) relock() // code was reset or revoked
   const data = (await res.json()) as { videoIds?: string[]; error?: string }
   if (!res.ok || !data.videoIds?.length) {
     throw new Error(data.error ?? 'No video found')

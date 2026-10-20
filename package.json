@@ -7,7 +7,11 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "code": "node --env-file=.env --experimental-strip-types --no-warnings scripts/codes.ts new",
+    "codes": "node --env-file=.env --experimental-strip-types --no-warnings scripts/codes.ts list",
+    "reset": "node --env-file=.env --experimental-strip-types --no-warnings scripts/codes.ts reset",
+    "revoke": "node --env-file=.env --experimental-strip-types --no-warnings scripts/codes.ts revoke"
   },
   "dependencies": {
     "lucide-react": "^1.59.0",
