@@ -1,4 +1,4 @@
-import { resolveVideoId } from '../api/catalog'
+import { dropVideoId, resolveVideoIds } from '../api/catalog'
 import { toast } from '../components/Toast'
 import { usePlayerStore } from '../store/playerStore'
 import type { Track } from '../types'
@@ -31,6 +31,8 @@ let playerPromise: Promise<YTPlayer> | null = null
 let player: YTPlayer | null = null
 let volume = 100
 let loadedVideoId: string | null = null
+let loadedTrackId: string | null = null
+let backupVideoIds: string[] = []
 let loadSeq = 0
 
 const store = () => usePlayerStore.getState()
@@ -70,6 +72,16 @@ function getPlayer(): Promise<YTPlayer> {
                 usePlayerStore.setState({ isPlaying: false })
             },
             onError: () => {
+              // Many music videos block embedding; try the next match first.
+              if (loadedTrackId && loadedVideoId) {
+                dropVideoId(loadedTrackId, loadedVideoId)
+              }
+              const nextId = backupVideoIds.shift()
+              if (nextId) {
+                loadedVideoId = nextId
+                p.loadVideoById({ videoId: nextId })
+                return
+              }
               toast('Could not play track — skipping')
               store().next(true)
             },
@@ -88,11 +100,13 @@ function getPlayer(): Promise<YTPlayer> {
 
 export async function loadAndPlay(track: Track, startSeconds = 0) {
   const seq = ++loadSeq
-  const videoId = await resolveVideoId(track)
+  const [videoId, ...backups] = await resolveVideoIds(track)
   if (seq !== loadSeq) return
   const p = await getPlayer()
   if (seq !== loadSeq) return // user skipped again while we were resolving
   loadedVideoId = videoId
+  loadedTrackId = track.id
+  backupVideoIds = backups
   p.loadVideoById({ videoId, startSeconds })
 }
 

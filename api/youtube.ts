@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
-// GET /api/youtube?q=artist+song -> { videoId }
+// GET /api/youtube?q=artist+song -> { videoIds } (best first; some refuse embedding)
 // Plain Node req/res so the same handler runs on Vercel and in the Vite dev server.
 export default async function handler(
   req: IncomingMessage,
@@ -28,7 +28,7 @@ export default async function handler(
     type: 'video',
     videoEmbeddable: 'true',
     videoCategoryId: '10', // Music
-    maxResults: '1',
+    maxResults: '5', // same 100-unit cost as 1
     q,
     key,
   })
@@ -42,9 +42,9 @@ export default async function handler(
     if (!r.ok) {
       return send(r.status, { error: data.error?.message ?? 'YouTube request failed' })
     }
-    const videoId = data.items?.[0]?.id?.videoId
-    if (!videoId) return send(404, { error: 'No video found' })
-    send(200, { videoId }, true)
+    const videoIds = (data.items ?? []).flatMap((i) => i.id?.videoId ?? [])
+    if (!videoIds.length) return send(404, { error: 'No video found' })
+    send(200, { videoIds }, true)
   } catch {
     send(502, { error: 'YouTube request failed' })
   }

@@ -77,9 +77,69 @@ function chart(genreId?: string) {
   })
 }
 
+// Versions people rarely mean unless they type the word themselves.
+const ALT_VERSION =
+  /karaoke|instrumental|originally performed|tribute|cover|sped up|speed|slowed|reverb|nightcore|8d|lullaby|kidz bop|rockabye|hardstyle|remix|\bmix\b|\bedit\b|version|8 bit|acoustic/i
+
+// "(Techno)", "[Live]": any bracket tag except feat./with/from/remaster.
+const TAGGED = /[([](?!feat|ft\.|with|from|remaster)[^)\]]*[)\]]/i
+
+const norm = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{N} ]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+
+const mainArtist = (t: Track) =>
+  norm(t.artistName.split(/,|&| feat| ft\.| x /i)[0])
+
+// iTunes has no popularity score. Proxy: the original artist shows up many
+// times (album, single, deluxe, remixes), a cover artist once. We drop
+// duplicates and loose matches, rank by that count, and push alt versions down.
+export function rankResults(query: string, tracks: Track[]): Track[] {
+  const artistHits = new Map<string, number>()
+  for (const t of tracks) {
+    artistHits.set(mainArtist(t), (artistHits.get(mainArtist(t)) ?? 0) + 1)
+  }
+  const seen = new Set<string>()
+  const unique = tracks.filter((t) => {
+    const key = `${norm(t.name)}|${norm(t.artistName)}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  const words = norm(query).split(' ')
+  const relevant = unique.filter((t) => {
+    const text = ` ${norm(`${t.name} ${t.artistName}`)} `
+    return words.every((w) => text.includes(w))
+  })
+  const q = norm(query)
+  // "Him & I (Remastered)" -> "him and i": exact title matches come first,
+  // unless the query is an artist name ("taylor swift").
+  const artistQuery = (artistHits.get(q) ?? 0) >= 3
+  const exact = (t: Track) =>
+    !artistQuery && norm(t.name.replace(/\s*[([].*$/, '')) === q ? 1 : 0
+  const hits = (t: Track) => artistHits.get(mainArtist(t)) ?? 0
+  const list = (relevant.length ? relevant : unique).sort(
+    (a, b) => exact(b) - exact(a) || hits(b) - hits(a), // stable on ties
+  )
+  if (ALT_VERSION.test(query)) return list.slice(0, 25)
+  const isAlt = (t: Track) =>
+    ALT_VERSION.test(`${t.name} ${t.artistName} ${t.albumName}`) ||
+    TAGGED.test(t.name)
+  return [...list.filter((t) => !isAlt(t)), ...list.filter(isAlt)].slice(0, 25)
+}
+
 export async function searchTracks(query: string): Promise<Track[]> {
   if (!query.trim()) return []
-  return songs('/search', { term: query.trim(), entity: 'song', limit: '25' })
+  const raw = await songs('/search', {
+    term: query.trim(),
+    entity: 'song',
+    limit: '50',
+  })
+  return rankResults(query, raw)
 }
 
 export function getTrending(): Promise<Track[]> {
@@ -99,12 +159,12 @@ export async function getTrack(id: string): Promise<Track | null> {
   return tracks[0] ?? null
 }
 
-// Song -> YouTube video id. Each miss costs 100 units of the shared
-// 10k/day YouTube quota, so hits are kept in localStorage forever.
+// Song -> candidate YouTube video ids. Each miss costs 100 units of the
+// shared 10k/day YouTube quota, so hits are kept in localStorage.
 // ponytail: per-device cache only; add a shared KV store if quota runs out.
 const VIDEO_IDS_KEY = 'yt-video-ids'
 
-function readVideoIds(): Record<string, string> {
+function readVideoIds(): Record<string, string | string[]> {
   try {
     return JSON.parse(localStorage.getItem(VIDEO_IDS_KEY) ?? '{}')
   } catch {
@@ -112,20 +172,35 @@ function readVideoIds(): Record<string, string> {
   }
 }
 
-export async function resolveVideoId(track: Track): Promise<string> {
-  const ids = readVideoIds()
-  if (ids[track.id]) return ids[track.id]
-  const q = `${track.artistName} ${track.name} audio`
-  const res = await fetch(`/api/youtube?${new URLSearchParams({ q })}`)
-  const data = (await res.json()) as { videoId?: string; error?: string }
-  if (!res.ok || !data.videoId) throw new Error(data.error ?? 'No video found')
+function saveVideoIds(trackId: string, videoIds: string[]) {
   try {
     localStorage.setItem(
       VIDEO_IDS_KEY,
-      JSON.stringify({ ...ids, [track.id]: data.videoId }),
+      JSON.stringify({ ...readVideoIds(), [trackId]: videoIds }),
     )
   } catch {
     // storage full or blocked: just resolve again next time
   }
-  return data.videoId
+}
+
+export async function resolveVideoIds(track: Track): Promise<string[]> {
+  const hit = readVideoIds()[track.id]
+  if (hit?.length) return typeof hit === 'string' ? [hit] : hit
+  const q = `${track.artistName} ${track.name} audio`
+  const res = await fetch(`/api/youtube?${new URLSearchParams({ q })}`)
+  const data = (await res.json()) as { videoIds?: string[]; error?: string }
+  if (!res.ok || !data.videoIds?.length) {
+    throw new Error(data.error ?? 'No video found')
+  }
+  saveVideoIds(track.id, data.videoIds)
+  return data.videoIds
+}
+
+// A candidate refused to play (usually "embedding disabled"): forget it.
+export function dropVideoId(trackId: string, videoId: string) {
+  const hit = readVideoIds()[trackId] ?? []
+  saveVideoIds(
+    trackId,
+    (typeof hit === 'string' ? [hit] : hit).filter((id) => id !== videoId),
+  )
 }
