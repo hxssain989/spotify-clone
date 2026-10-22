@@ -22,12 +22,19 @@ export function TrackMenuSheet({ track, onClose }: Props) {
 
   return (
     <div className="fixed inset-0 z-[70] flex flex-col justify-end bg-black/60">
-      <button type="button" className="flex-1" aria-label="Close menu" onClick={onClose} />
+      <button
+        type="button"
+        className="flex-1"
+        aria-label="Close menu"
+        onClick={onClose}
+      />
       <div className="rounded-t-2xl bg-surface-elevated pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
           <div className="min-w-0 pr-4">
             <p className="truncate font-medium">{track.name}</p>
-            <p className="truncate text-sm text-text-muted">{track.artistName}</p>
+            <p className="truncate text-sm text-text-muted">
+              {track.artistName}
+            </p>
           </div>
           <button
             type="button"
@@ -63,22 +70,26 @@ export function TrackMenuSheet({ track, onClose }: Props) {
               Add to queue
             </button>
           </li>
-          <li>
-            <button
-              type="button"
-              className="flex min-h-11 w-full items-center rounded-md px-3 text-left hover:bg-surface-highlight focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              onClick={async () => {
-                onClose()
-                const tracks = await getByArtist(track.artistId)
-                if (tracks.length) playTrack(tracks[0], tracks)
-              }}
-            >
-              Go to artist
-            </button>
-          </li>
+          {track.artistId && (
+            <li>
+              <button
+                type="button"
+                className="flex min-h-11 w-full items-center rounded-md px-3 text-left hover:bg-surface-highlight focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                onClick={async () => {
+                  onClose()
+                  const tracks = await getByArtist(track.artistId)
+                  if (tracks.length) playTrack(tracks[0], tracks)
+                }}
+              >
+                Go to artist
+              </button>
+            </li>
+          )}
           {playlists.length > 0 && (
             <li className="border-t border-neutral-800 mt-2 pt-2">
-              <p className="px-3 py-1 text-xs text-text-muted">Add to playlist</p>
+              <p className="px-3 py-1 text-xs text-text-muted">
+                Add to playlist
+              </p>
               {playlists.map((p) => (
                 <button
                   key={p.id}

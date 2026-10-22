@@ -11,15 +11,12 @@ type LibraryState = {
   cacheTrack: (track: Track) => void
   cacheTracks: (tracks: Track[]) => void
   createPlaylist: (name: string) => string
+  importPlaylist: (name: string, tracks: Track[]) => string
   renamePlaylist: (id: string, name: string) => void
   deletePlaylist: (id: string) => void
   addTrackToPlaylist: (playlistId: string, track: Track) => void
   removeTrackFromPlaylist: (playlistId: string, trackId: string) => void
-  reorderPlaylistTracks: (
-    playlistId: string,
-    from: number,
-    to: number,
-  ) => void
+  reorderPlaylistTracks: (playlistId: string, from: number, to: number) => void
   getLikedTracks: () => Track[]
   getPlaylistTracks: (playlistId: string) => Track[]
 }
@@ -66,6 +63,17 @@ export const useLibraryStore = create<LibraryState>()(
           createdAt: Date.now(),
         }
         set((s) => ({ playlists: [...s.playlists, playlist] }))
+        return id
+      },
+
+      importPlaylist: (name, tracks) => {
+        get().cacheTracks(tracks)
+        const id = get().createPlaylist(name)
+        set((s) => ({
+          playlists: s.playlists.map((p) =>
+            p.id === id ? { ...p, trackIds: tracks.map((t) => t.id) } : p,
+          ),
+        }))
         return id
       },
 

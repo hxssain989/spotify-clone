@@ -1,6 +1,8 @@
-import { Plus } from 'lucide-react'
+import { Download, Plus } from 'lucide-react'
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { importSpotifyPlaylist } from '../api/catalog'
+import { toast } from '../components/Toast'
 import { TrackMenuSheet } from '../components/TrackMenuSheet'
 import { TrackRow } from '../components/TrackRow'
 import { useLibraryStore } from '../store/libraryStore'
@@ -18,6 +20,27 @@ export function LibraryPage() {
     .filter((t): t is Track => Boolean(t))
   const playlists = useLibraryStore((s) => s.playlists)
   const createPlaylist = useLibraryStore((s) => s.createPlaylist)
+  const importPlaylist = useLibraryStore((s) => s.importPlaylist)
+  const navigate = useNavigate()
+  const [importing, setImporting] = useState(false)
+
+  async function importFromSpotify() {
+    const link = window.prompt(
+      'Paste a Spotify playlist link (Share → Copy link)',
+    )
+    if (!link?.trim()) return
+    setImporting(true)
+    try {
+      const { name, tracks } = await importSpotifyPlaylist(link.trim())
+      const id = importPlaylist(name, tracks)
+      toast(`Imported ${tracks.length} songs`)
+      navigate(`/playlist/${id}`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Import failed')
+    } finally {
+      setImporting(false)
+    }
+  }
   const playTrack = usePlayerStore((s) => s.playTrack)
   const [menuTrack, setMenuTrack] = useState<Track | null>(null)
 
@@ -28,7 +51,9 @@ export function LibraryPage() {
           type="button"
           onClick={() => setTab('liked')}
           className={`min-h-11 rounded-full px-4 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-            tab === 'liked' ? 'bg-white text-black' : 'bg-surface-highlight text-white'
+            tab === 'liked'
+              ? 'bg-white text-black'
+              : 'bg-surface-highlight text-white'
           }`}
         >
           Liked
@@ -85,6 +110,15 @@ export function LibraryPage() {
             <Plus className="h-5 w-5" />
             Create playlist
           </button>
+          <button
+            type="button"
+            disabled={importing}
+            onClick={importFromSpotify}
+            className="mb-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-dashed border-neutral-600 text-sm disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            <Download className="h-5 w-5" />
+            {importing ? 'Importing…' : 'Import from Spotify'}
+          </button>
           {playlists.length === 0 ? (
             <p className="text-text-muted">Create a playlist to get started.</p>
           ) : (
@@ -110,8 +144,8 @@ export function LibraryPage() {
       <section className="mt-10 border-t border-neutral-800 pt-6 pb-4">
         <h2 className="mb-2 text-lg font-semibold">About</h2>
         <p className="text-sm text-text-muted leading-relaxed">
-          Song info from Apple's iTunes catalog, playback through YouTube.
-          Music plays while the player is open on screen.
+          Song info from Apple's iTunes catalog, playback through YouTube. Music
+          plays while the player is open on screen.
         </p>
       </section>
 

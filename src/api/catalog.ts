@@ -188,6 +188,33 @@ export async function getTrack(id: string): Promise<Track | null> {
   return tracks[0] ?? null
 }
 
+// Spotify playlist link -> songs, via /api/spotify (first 100 songs).
+export async function importSpotifyPlaylist(
+  link: string,
+): Promise<{ name: string; tracks: Track[] }> {
+  const res = await fetch(`/api/spotify?${new URLSearchParams({ url: link })}`)
+  if (res.status === 401) relock()
+  const data = (await res.json()) as {
+    name?: string
+    image?: string
+    tracks?: { id: string; name: string; artists: string; duration: number }[]
+    error?: string
+  }
+  if (!res.ok || !data.tracks) throw new Error(data.error ?? 'Import failed')
+  return {
+    name: data.name ?? 'Spotify playlist',
+    tracks: data.tracks.map((t) => ({
+      id: `sp:${t.id}`,
+      name: t.name,
+      artistId: '',
+      artistName: t.artists,
+      albumName: data.name ?? 'Spotify playlist',
+      image: data.image ?? '', // the embed has no per-song covers
+      duration: t.duration,
+    })),
+  }
+}
+
 // Song -> candidate YouTube video ids. Each miss costs 100 units of the
 // shared 10k/day YouTube quota, so hits are kept in localStorage.
 // ponytail: per-device cache only; add a shared KV store if quota runs out.

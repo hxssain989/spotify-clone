@@ -11,9 +11,12 @@ export function PlaylistPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const playlist = useLibraryStore((s) => s.playlists.find((p) => p.id === id))
-  const tracks = useLibraryStore((s) =>
-    id ? s.getPlaylistTracks(id) : [],
-  )
+  // Select stable state and derive the list here: a selector that builds a
+  // new array every call makes React re-render forever.
+  const trackCache = useLibraryStore((s) => s.trackCache)
+  const tracks = (playlist?.trackIds ?? [])
+    .map((trackId) => trackCache[trackId])
+    .filter((t): t is Track => Boolean(t))
   const renamePlaylist = useLibraryStore((s) => s.renamePlaylist)
   const deletePlaylist = useLibraryStore((s) => s.deletePlaylist)
   const removeTrackFromPlaylist = useLibraryStore(

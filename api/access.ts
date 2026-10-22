@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { getCode, hasAccess, MAX_DEVICES, normCode, saveCode } from './_access.js'
+import {
+  getCode,
+  hasAccess,
+  MAX_DEVICES,
+  normCode,
+  readAccessCookie,
+  saveCode,
+} from './_access.js'
 
-// GET  /api/access                 -> { ok } for this device's cookie
+// GET  /api/access                 -> { ok } for this device's cookie (renews it)
 // POST /api/access { code }        -> unlocks this device (max 2 per code)
 export default async function handler(
   req: IncomingMessage & { body?: unknown },
@@ -16,7 +23,14 @@ export default async function handler(
   }
 
   try {
-    if (req.method === 'GET') return send(200, { ok: await hasAccess(req) })
+    if (req.method === 'GET') {
+      const ok = await hasAccess(req)
+      const cookie = readAccessCookie(req)
+      // Browsers cap cookies at 400 days; renewing on every visit keeps an
+      // unlocked device unlocked for as long as it keeps using the app.
+      if (ok && cookie) setAccessCookie(req, res, cookie.code, cookie.deviceId)
+      return send(200, { ok })
+    }
     if (req.method !== 'POST') return send(405, { error: 'Method not allowed' })
 
     const body = (req.body ?? JSON.parse((await readBody(req)) || '{}')) as {
@@ -37,15 +51,24 @@ export default async function handler(
     entry.devices.push(deviceId)
     await saveCode(code, entry)
 
-    const https = req.headers['x-forwarded-proto'] === 'https'
-    res.setHeader(
-      'Set-Cookie',
-      `access=${encodeURIComponent(`${code}.${deviceId}`)}; Path=/; Max-Age=315360000; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`,
-    )
+    setAccessCookie(req, res, code, deviceId)
     send(200, { ok: true })
   } catch {
     send(500, { error: 'Could not check the code. Try again.' })
   }
+}
+
+function setAccessCookie(
+  req: IncomingMessage,
+  res: ServerResponse,
+  code: string,
+  deviceId: string,
+) {
+  const https = req.headers['x-forwarded-proto'] === 'https'
+  res.setHeader(
+    'Set-Cookie',
+    `access=${encodeURIComponent(`${code}.${deviceId}`)}; Path=/; Max-Age=34560000; HttpOnly; SameSite=Lax${https ? '; Secure' : ''}`,
+  )
 }
 
 async function readBody(req: IncomingMessage) {

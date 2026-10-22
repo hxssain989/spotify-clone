@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig, loadEnv, type Plugin } from 'vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import accessHandler from './api/access.ts'
+import spotifyHandler from './api/spotify.ts'
 import youtubeHandler from './api/youtube.ts'
 
 // Dev: serve the Vercel functions at the same paths.
@@ -10,7 +11,11 @@ function apiRoutes(): Plugin {
   return {
     name: 'api-routes',
     configureServer(server) {
-      const routes = { '/api/youtube': youtubeHandler, '/api/access': accessHandler }
+      const routes = {
+        '/api/youtube': youtubeHandler,
+        '/api/access': accessHandler,
+        '/api/spotify': spotifyHandler,
+      }
       for (const [path, handler] of Object.entries(routes)) {
         server.middlewares.use(path, (req, res) => {
           // Re-read .env per request so new keys need no restart.
